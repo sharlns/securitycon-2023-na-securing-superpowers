@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: seattle-bpf-droid
+spec:
+  containers:
+  - name: seattle-bpf-droid
+    image: quay.io/natalia-2-pilot/securing-the-superpowers-seattle-2023:latest
+    imagePullPolicy: Always
+    securityContext:
+      privileged: true
