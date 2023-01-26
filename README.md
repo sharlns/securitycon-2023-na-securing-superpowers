@@ -1,40 +1,32 @@
 # Securing the Superpowers - Who loaded that eBPF program?
 
+This repository contains the demo and the corresponding instructions that was presented at SecurityCon 2023 NA, Seattle
+during `Securing the Superpowers - Who loaded that eBPF program?`.
+
 ## Environment
 
-
-Create `cilium` namespace:
+Create a GKE cluster:
 ```bash
-kubectl create ns cilium
-namespace/cilium created
+export NAME="$(whoami)-$RANDOM"
+gcloud container clusters create "${NAME}" \
+  --zone europe-central2-a \
+  --num-nodes 1
 ```
 
-Set the `NAME` and `ZONE` variables to your cluster:
+Deploy Tetragon:
 ```bash
-NAME=<cluster_name>
-ZONE=<zone_name>
+helm repo add cilium https://helm.cilium.io
+helm repo update
+helm install tetragon cilium/tetragon -n kube-system
+kubectl rollout status -n kube-system ds/tetragon -w
 ```
 
-Extract the cluster CIDR to enable native routing:
+Apply a TracingPolicy which would detect BPF program loading and BPF map creation:
 ```bash
-NATIVE_CIDR="$(gcloud container clusters describe "${NAME}" --zone "${ZONE}" --format 'value(clusterIpv4Cidr)')"
-echo $NATIVE_CIDR
+kubectl apply -f bpf.yaml
 ```
 
-Install Cilium via helm:
-```bash
-helm install cilium cilium/cilium --version 1.12.5 \
-  --namespace kube-system \
-  --set nodeinit.enabled=true \
-  --set nodeinit.reconfigureKubelet=true \
-  --set nodeinit.removeCbrBridge=true \
-  --set cni.binPath=/home/kubernetes/bin \
-  --set gke.enabled=true \
-  --set ipam.mode=kubernetes \
-  --set ipv4NativeRoutingCIDR=$NATIVE_CIDR
-```
-
-### Demo 1 - Simple program
+### Demo 1 - Who loaded that simple BPF program? And created the map?
 
 Create `washington` namespace:
 
@@ -99,9 +91,40 @@ We can see that the map was hash map (`BPF_MAP_TYPE_HASH`), the key and the valu
 To be able to detect BPF map creation, Tetragon hooks into the `security_bpf_map_alloc` function which is called during a 
 BPF map create. 
 
-### Demo 2 - Cilium
+### Demo 2 - Which programs were loaded by Cilium?
 
 As a second demo, we will show a real use case and detect what BPF programs were loaded by Cilium and what BPF maps were created.
+
+Create `cilium` namespace:
+```bash
+kubectl create ns cilium
+namespace/cilium created
+```
+
+Set the `NAME` and `ZONE` variables to your cluster:
+```bash
+NAME=<cluster_name>
+ZONE=<zone_name>
+```
+
+Extract the cluster CIDR to enable native routing:
+```bash
+NATIVE_CIDR="$(gcloud container clusters describe "${NAME}" --zone "${ZONE}" --format 'value(clusterIpv4Cidr)')"
+echo $NATIVE_CIDR
+```
+
+Install Cilium via helm:
+```bash
+helm install cilium cilium/cilium --version 1.12.5 \
+  --namespace kube-system \
+  --set nodeinit.enabled=true \
+  --set nodeinit.reconfigureKubelet=true \
+  --set nodeinit.removeCbrBridge=true \
+  --set cni.binPath=/home/kubernetes/bin \
+  --set gke.enabled=true \
+  --set ipam.mode=kubernetes \
+  --set ipv4NativeRoutingCIDR=$NATIVE_CIDR
+```
 
 Start observing the events from the Cilium pod:
 ```bash
